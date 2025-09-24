@@ -1,0 +1,317 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ENUMs
+enum user_role {
+  admin
+  guru
+  siswa
+}
+
+enum dudi_status {
+  aktif
+  tidak_aktif
+}
+
+enum magang_status {
+  pending
+  aktif
+  selesai
+  dibatalkan
+}
+
+enum verifikasi_status {
+  menunggu
+  disetujui
+  ditolak
+}
+
+enum pendaftaran_status {
+  menunggu
+  diterima
+  ditolak
+}
+
+enum upload_type {
+  jurnal_foto
+  logo_sekolah
+  profile_photo
+}
+
+enum notification_type {
+  info
+  success
+  warning
+  error
+}
+
+// Main users table
+model users {
+  id            String     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  email         String     @unique @db.VarChar
+  password_hash String     @db.VarChar
+  role          user_role
+  first_name    String?    @db.VarChar
+  last_name     String?    @db.VarChar
+  phone         String?    @db.VarChar
+  is_verified   Boolean?   @default(false)
+  created_at    DateTime?  @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime?  @default(now()) @db.Timestamptz(6)
+  deleted_at    DateTime?  @db.Timestamptz(6)
+
+  // Relationships
+  siswa_profile         siswa_profiles?
+  guru_profile          guru_profiles?
+  refresh_tokens        refresh_tokens[]
+  file_uploads          file_uploads[]
+  activity_logs         activity_logs[]
+  notifications         notifications[]
+  
+  // Internship relationships
+  magang_siswa          magang[] @relation("MagangSiswa")
+  magang_guru           magang[] @relation("MagangGuru") 
+  jurnal_verifications  jurnal_harian[] @relation("JurnalVerifier")
+  pendaftaran_magang    pendaftaran_magang[]
+  processed_registrations pendaftaran_magang[] @relation("RegistrationProcessor")
+
+  @@index([email], map: "idx_users_email")
+  @@index([role], map: "idx_users_role")
+  @@map("users")
+}
+
+// Student profiles
+model siswa_profiles {
+  user_id       String   @id @db.Uuid
+  nis           String   @unique @db.VarChar
+  kelas         String   @db.VarChar
+  jurusan       String   @db.VarChar
+  tahun_ajaran  String   @db.VarChar
+  nama_ortu     String?  @db.VarChar
+  alamat        String?
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime? @default(now()) @db.Timestamptz(6)
+
+  // Relationships
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([nis], map: "idx_siswa_profiles_nis")
+  @@map("siswa_profiles")
+}
+
+// Teacher profiles
+model guru_profiles {
+  user_id        String   @id @db.Uuid
+  nip            String?  @unique @db.VarChar
+  mata_pelajaran String?  @db.VarChar
+  is_active      Boolean? @default(true)
+  created_at     DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime? @default(now()) @db.Timestamptz(6)
+
+  // Relationships
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([nip], map: "idx_guru_profiles_nip")
+  @@map("guru_profiles")
+}
+
+// DUDI (Industry Partners)
+model dudi {
+  id                String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  nama_perusahaan   String      @db.VarChar
+  alamat            String
+  telepon           String?     @db.VarChar
+  email             String?     @db.VarChar
+  penanggung_jawab  String      @db.VarChar
+  bidang_usaha      String?     @db.VarChar
+  kuota_siswa       Int?        @default(1)
+  status            dudi_status @default(aktif)
+  created_at        DateTime?   @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime?   @default(now()) @db.Timestamptz(6)
+  deleted_at        DateTime?   @db.Timestamptz(6)
+
+  // Relationships
+  magang             magang[]
+  pendaftaran_magang pendaftaran_magang[]
+
+  @@index([status], map: "idx_dudi_status")
+  @@index([nama_perusahaan(ops: raw("gin_trgm_ops"))], map: "idx_dudi_nama", type: Gin)
+  @@map("dudi")
+}
+
+// Internship records
+model magang {
+  id                   String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  siswa_id             String         @db.Uuid
+  guru_pembimbing_id   String         @db.Uuid
+  dudi_id              String         @db.Uuid
+  tanggal_mulai        DateTime       @db.Date
+  tanggal_selesai      DateTime       @db.Date
+  status               magang_status  @default(pending)
+  nilai_akhir          Decimal?       @db.Decimal(5, 2)
+  catatan_guru         String?
+  created_at           DateTime?      @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime?      @default(now()) @db.Timestamptz(6)
+
+  // Relationships
+  siswa          users @relation("MagangSiswa", fields: [siswa_id], references: [id], onDelete: Cascade)
+  guru_pembimbing users @relation("MagangGuru", fields: [guru_pembimbing_id], references: [id], onDelete: Restrict)
+  dudi           dudi  @relation(fields: [dudi_id], references: [id], onDelete: Restrict)
+  jurnal_harian  jurnal_harian[]
+
+  @@index([siswa_id], map: "idx_magang_siswa_id")
+  @@index([guru_pembimbing_id], map: "idx_magang_guru_id")
+  @@index([dudi_id], map: "idx_magang_dudi_id")
+  @@index([status], map: "idx_magang_status")
+  @@map("magang")
+}
+
+// Daily journals
+model jurnal_harian {
+  id                  String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  magang_id           String             @db.Uuid
+  tanggal             DateTime           @db.Date
+  kegiatan            String
+  foto_dokumentasi    String?            @db.VarChar
+  status_verifikasi   verifikasi_status  @default(menunggu)
+  catatan_guru        String?
+  verified_by         String?            @db.Uuid
+  verified_at         DateTime?          @db.Timestamptz(6)
+  created_at          DateTime?          @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime?          @default(now()) @db.Timestamptz(6)
+  deleted_at          DateTime?          @db.Timestamptz(6)
+
+  // Relationships
+  magang    magang @relation(fields: [magang_id], references: [id], onDelete: Cascade)
+  verifier  users? @relation("JurnalVerifier", fields: [verified_by], references: [id], onDelete: SetNull)
+
+  @@unique([magang_id, tanggal])
+  @@index([magang_id], map: "idx_jurnal_magang_id")
+  @@index([tanggal], map: "idx_jurnal_tanggal")
+  @@index([status_verifikasi], map: "idx_jurnal_status")
+  @@map("jurnal_harian")
+}
+
+// Student internship registrations
+model pendaftaran_magang {
+  id             String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  siswa_id       String               @db.Uuid
+  dudi_id        String               @db.Uuid
+  status         pendaftaran_status   @default(menunggu)
+  tanggal_daftar DateTime?            @default(now()) @db.Timestamptz(6)
+  catatan_siswa  String?
+  catatan_admin  String?
+  processed_by   String?              @db.Uuid
+  processed_at   DateTime?            @db.Timestamptz(6)
+  created_at     DateTime?            @default(now()) @db.Timestamptz(6)
+
+  // Relationships
+  siswa     users @relation(fields: [siswa_id], references: [id], onDelete: Cascade)
+  dudi      dudi  @relation(fields: [dudi_id], references: [id], onDelete: Cascade)
+  processor users? @relation("RegistrationProcessor", fields: [processed_by], references: [id], onDelete: SetNull)
+
+  @@unique([siswa_id, dudi_id], map: "unique_siswa_dudi")
+  @@index([siswa_id], map: "idx_pendaftaran_siswa")
+  @@index([status], map: "idx_pendaftaran_status")
+  @@map("pendaftaran_magang")
+}
+
+// School settings
+model pengaturan_sekolah {
+  id                  String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  nama_sekolah        String    @db.VarChar
+  alamat_sekolah      String?
+  telepon_sekolah     String?   @db.VarChar
+  email_sekolah       String?   @db.VarChar
+  logo_sekolah        String?   @db.VarChar
+  kepala_sekolah      String?   @db.VarChar
+  tahun_ajaran_aktif  String?   @db.VarChar
+  created_at          DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@map("pengaturan_sekolah")
+}
+
+// File uploads
+model file_uploads {
+  id                String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  filename          String      @db.VarChar
+  original_filename String      @db.VarChar
+  file_path         String      @db.VarChar
+  file_size         Int
+  mime_type         String      @db.VarChar
+  uploaded_by       String      @db.Uuid
+  upload_type       upload_type
+  created_at        DateTime?   @default(now()) @db.Timestamptz(6)
+
+  // Relationships
+  uploader users @relation(fields: [uploaded_by], references: [id], onDelete: Cascade)
+
+  @@map("file_uploads")
+}
+
+// Refresh tokens for authentication
+model refresh_tokens {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id     String    @db.Uuid
+  token       String    @unique @db.VarChar
+  expires_at  DateTime  @db.Timestamptz(6)
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  revoked_at  DateTime? @db.Timestamptz(6)
+  device_info String?   @db.VarChar
+  ip_address  String?   @db.Inet
+
+  // Relationships
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id], map: "idx_refresh_tokens_user_id")
+  @@index([token], map: "idx_refresh_tokens_token")
+  @@map("refresh_tokens")
+}
+
+// Activity logs for audit trail
+model activity_logs {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id     String?   @db.Uuid
+  action      String    @db.VarChar
+  table_name  String?   @db.VarChar
+  record_id   String?   @db.Uuid
+  old_values  Json?     @db.JsonB
+  new_values  Json?     @db.JsonB
+  ip_address  String?   @db.Inet
+  user_agent  String?
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+
+  // Relationships
+  user users? @relation(fields: [user_id], references: [id], onDelete: SetNull)
+
+  @@map("activity_logs")
+}
+
+// Notifications
+model notifications {
+  id          String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id     String            @db.Uuid
+  title       String            @db.VarChar
+  message     String
+  type        notification_type @default(info)
+  is_read     Boolean?          @default(false)
+  action_url  String?           @db.VarChar
+  created_at  DateTime?         @default(now()) @db.Timestamptz(6)
+
+  // Relationships
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id], map: "idx_notifications_user_id")
+  @@index([is_read], map: "idx_notifications_read")
+  @@map("notifications")
+}
