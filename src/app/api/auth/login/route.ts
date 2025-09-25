@@ -1,37 +1,31 @@
-import { NextApiRequest, NextApiResponse } from 'next';
-import { setCookie } from 'cookies-next';
+import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { loginUser } from '@/lib/services/authService';
 import { getClientInfo } from '@/utils/clientInfo';
-import { ApiResponse } from '@/types/api.types';
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse<ApiResponse>
-) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({
-      success: false,
-      error: 'Method not allowed'
-    });
-  }
-  
+export async function POST(request: NextRequest) {
   try {
-    const { email, password } = req.body;
+    const body = await request.json();
+    const { email, password } = body;
     
     if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        error: 'Email and password are required'
-      });
+      return NextResponse.json(
+        { success: false, error: 'Email and password are required' },
+        { status: 400 }
+      );
     }
     
-    const clientInfo = getClientInfo(req);
+    const clientInfo = {
+      deviceInfo: request.headers.get('user-agent') || 'Unknown Device',
+      ipAddress: request.headers.get('x-forwarded-for') || 
+                 request.headers.get('x-real-ip') || 
+                 'unknown'
+    };
+    
     const result = await loginUser(email.toLowerCase().trim(), password, clientInfo);
     
-    // Set refresh token as httpOnly cookie
-    setCookie('refreshToken', result.refreshToken, {
-      req,
-      res,
+    const cookieStore = await cookies();
+    cookieStore.set('refreshToken', result.refreshToken!, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
@@ -39,7 +33,7 @@ export default async function handler(
       path: '/'
     });
     
-    res.json({
+    return NextResponse.json({
       success: true,
       data: {
         user: result.user,
@@ -52,15 +46,15 @@ export default async function handler(
     console.error('Login error:', error);
     
     if (error.message.includes('Invalid email or password')) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid email or password'
-      });
+      return NextResponse.json(
+        { success: false, error: 'Invalid email or password' },
+        { status: 401 }
+      );
     }
     
-    res.status(500).json({
-      success: false,
-      error: 'Login failed'
-    });
+    return NextResponse.json(
+      { success: false, error: 'Login failed' },
+      { status: 500 }
+    );
   }
 }

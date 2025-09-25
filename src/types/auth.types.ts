@@ -3,7 +3,7 @@ import { UserResponse } from './user.types';
 export interface AuthResponse {
   user: UserResponse;
   accessToken: string;
-  refreshToken?: string; // Add this line
+  refreshToken?: string;
   message?: string;
 }
 
@@ -15,7 +15,7 @@ export interface TokenPair {
 export interface JWTPayload {
   userId: string;
   email: string;
-  role: 'customer' | 'employee' | 'admin';
+  role: 'siswa' | 'guru' | 'admin'; 
   firstName?: string;
   lastName?: string;
   iat?: number;

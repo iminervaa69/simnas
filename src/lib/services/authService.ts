@@ -7,17 +7,14 @@ import { generateAccessToken, generateRefreshToken, storeRefreshToken, validateR
 export async function registerUser(userData: RegisterUserData, clientInfo?: ClientInfo): Promise<AuthResponse> {
   const { email, password, role = 'customer', firstName, lastName, phone } = userData;
   
-  // Check if user already exists
   const existingUser = await query('SELECT id FROM users WHERE email = $1', [email]);
   
   if (existingUser.rows.length > 0) {
     throw new Error('User already exists with this email');
   }
   
-  // Hash password
   const passwordHash = await hashPassword(password);
   
-  // Insert user
   const result = await query(
     `INSERT INTO users (email, password_hash, role, first_name, last_name, phone) 
      VALUES ($1, $2, $3, $4, $5, $6) 
@@ -27,11 +24,9 @@ export async function registerUser(userData: RegisterUserData, clientInfo?: Clie
   
   const user: User = result.rows[0];
   
-  // Generate tokens
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken();
   
-  // Store refresh token
   await storeRefreshToken(user.id, refreshToken, clientInfo?.deviceInfo, clientInfo?.ipAddress);
   
   return {
@@ -54,7 +49,6 @@ export async function loginUser(
   password: string, 
   clientInfo?: ClientInfo
 ): Promise<AuthResponse> {
-  // Get user by email
   const result = await query(
     'SELECT * FROM users WHERE email = $1 AND deleted_at IS NULL',
     [email]
@@ -66,21 +60,17 @@ export async function loginUser(
   
   const user: User = result.rows[0];
   
-  // Compare password
   const isValidPassword = await comparePassword(password, user.password_hash);
   
   if (!isValidPassword) {
     throw new Error('Invalid email or password');
   }
   
-  // Generate tokens
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken();
   
-  // Store refresh token
   await storeRefreshToken(user.id, refreshToken, clientInfo?.deviceInfo, clientInfo?.ipAddress);
   
-  // Update last login
   await query('UPDATE users SET updated_at = NOW() WHERE id = $1', [user.id]);
   
   return {
@@ -99,14 +89,12 @@ export async function loginUser(
 }
 
 export async function refreshAccessToken(refreshToken: string, clientInfo?: ClientInfo): Promise<TokenPair> {
-  // Validate refresh token
   const tokenData = await validateRefreshToken(refreshToken);
   
   if (!tokenData || !tokenData.isValid) {
     throw new Error('Invalid or expired refresh token');
   }
   
-  // Get user data
   const userResult = await query(
     'SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL',
     [tokenData.userId]
@@ -118,14 +106,11 @@ export async function refreshAccessToken(refreshToken: string, clientInfo?: Clie
   
   const user: User = userResult.rows[0];
   
-  // Generate new tokens
   const newAccessToken = generateAccessToken(user);
   const newRefreshToken = generateRefreshToken();
   
-  // Revoke old refresh token
   await revokeRefreshToken(refreshToken);
   
-  // Store new refresh token
   await storeRefreshToken(user.id, newRefreshToken, clientInfo?.deviceInfo, clientInfo?.ipAddress);
   
   return {
@@ -136,14 +121,12 @@ export async function refreshAccessToken(refreshToken: string, clientInfo?: Clie
 
 export async function logoutUser(refreshToken: string): Promise<{ message: string }> {
   try {
-    // Revoke refresh token
     await revokeRefreshToken(refreshToken);
     
     return {
       message: 'Logout successful'
     };
   } catch (error) {
-    // Even if token revocation fails, consider logout successful
     return {
       message: 'Logout successful'
     };
@@ -151,7 +134,6 @@ export async function logoutUser(refreshToken: string): Promise<{ message: strin
 }
 
 export async function logoutAllDevices(userId: string): Promise<{ message: string }> {
-  // Revoke all refresh tokens for the user
   await query(
     'UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL',
     [userId]
@@ -167,7 +149,6 @@ export async function changePassword(
   currentPassword: string, 
   newPassword: string
 ): Promise<{ message: string }> {
-  // Get user data
   const userResult = await query(
     'SELECT password_hash FROM users WHERE id = $1 AND deleted_at IS NULL',
     [userId]
@@ -179,23 +160,19 @@ export async function changePassword(
   
   const user = userResult.rows[0];
   
-  // Verify current password
   const isValidPassword = await comparePassword(currentPassword, user.password_hash);
   
   if (!isValidPassword) {
     throw new Error('Current password is incorrect');
   }
   
-  // Hash new password
   const newPasswordHash = await hashPassword(newPassword);
   
-  // Update password
   await query(
     'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
     [newPasswordHash, userId]
   );
   
-  // Optionally revoke all refresh tokens to force re-login on all devices
   await query(
     'UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL',
     [userId]
@@ -235,7 +212,6 @@ export async function updateUserProfile(
 ): Promise<UserResponse> {
   const { firstName, lastName, phone } = updateData;
   
-  // Build dynamic query
   const updates: string[] = [];
   const values: any[] = [];
   let paramCount = 1;
