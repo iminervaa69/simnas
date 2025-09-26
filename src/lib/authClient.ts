@@ -1,9 +1,10 @@
 import axios from 'axios';
-import { UserResponse, RegisterUserData } from '@/types/user.types';
+import { AxiosRequestConfig, AxiosRequestHeaders } from 'axios';
+import { UserResponse } from '@/types/user.types';
 import { AuthResponse } from '@/types/auth.types';
 
-// API response wrapper types
 interface ApiResponse<T> {
+  success: boolean;
   data: T;
   message?: string;
 }
@@ -11,11 +12,7 @@ interface ApiResponse<T> {
 interface AuthApiResponse {
   user: UserResponse;
   accessToken: string;
-  refreshToken: string; // Add refreshToken if your API provides it
-}
-
-interface UserApiResponse {
-  user: UserResponse;
+  refreshToken?: string;
 }
 
 const api = axios.create({
@@ -23,7 +20,10 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// Token management
+interface RequestConfigWithHeaders extends AxiosRequestConfig {
+  headers: AxiosRequestHeaders;
+}
+
 let accessToken: string | null = null;
 
 export const setAccessToken = (token: string | null) => {
@@ -37,7 +37,6 @@ export const setAccessToken = (token: string | null) => {
   }
 };
 
-// Initialize token from localStorage
 if (typeof window !== 'undefined') {
   const token = localStorage.getItem('accessToken');
   if (token) {
@@ -45,20 +44,17 @@ if (typeof window !== 'undefined') {
   }
 }
 
-// Request interceptor
-api.interceptors.request.use((config) => {
-  // Ensure headers object exists
+api.interceptors.request.use((config: RequestConfigWithHeaders) => {
   if (!config.headers) {
-    config.headers = {};
+    config.headers = {} as AxiosRequestHeaders;
   }
   
   if (accessToken) {
-    config.headers.Authorization = `Bearer ${accessToken}`;
+    config.headers['Authorization'] = `Bearer ${accessToken}`;
   }
   return config;
 });
 
-// Response interceptor for token refresh
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -74,7 +70,7 @@ api.interceptors.response.use(
         return api(original);
       } catch (refreshError) {
         setAccessToken(null);
-        window.location.href = '/auth/login';
+        window.location.href = '/login';
         return Promise.reject(refreshError);
       }
     }
@@ -84,35 +80,44 @@ api.interceptors.response.use(
 );
 
 export const authApi = {
-  register: async (userData: RegisterUserData): Promise<AuthResponse> => {
-    const response = await api.post<ApiResponse<AuthApiResponse>>('/auth/register', userData);
-    const { user, accessToken, refreshToken } = response.data.data;
-    setAccessToken(accessToken);
-
-    return { user, accessToken, refreshToken: refreshToken || undefined };
-  },
-
   login: async (email: string, password: string): Promise<AuthResponse> => {
-    const response = await api.post<ApiResponse<AuthApiResponse>>('/auth/login', { email, password });
-    const { user, accessToken, refreshToken } = response.data.data;
-    setAccessToken(accessToken);
-    return { user, accessToken, refreshToken: refreshToken || undefined };
+    try {
+      const response = await api.post<ApiResponse<AuthApiResponse>>('/auth/login', { 
+        email, 
+        password 
+      });
+      
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Login failed');
+      }
+      
+      const { user, accessToken, refreshToken } = response.data.data;
+      setAccessToken(accessToken);
+      
+      return { 
+        user, 
+        accessToken, 
+        refreshToken,
+        message: response.data.message 
+      };
+    } catch (error: any) {
+      if (error.response?.data?.error) {
+        throw new Error(error.response.data.error);
+      }
+      throw new Error(error.message || 'Login failed');
+    }
   },
 
   logout: async (): Promise<void> => {
-    await api.post<void>('/auth/logout');
-    setAccessToken(null);
+    try {
+      await api.post('/auth/logout');
+    } finally {
+      setAccessToken(null);
+    }
   },
 
   getCurrentUser: async (): Promise<UserResponse> => {
-    const response = await api.get<ApiResponse<UserApiResponse>>('/auth/me');
+    const response = await api.get<ApiResponse<{ user: UserResponse }>>('/auth/me');
     return response.data.data.user;
-  },
-
-  refreshToken: async (): Promise<string> => {
-    const response = await api.post<ApiResponse<{ accessToken: string }>>('/auth/refresh');
-    const { accessToken } = response.data.data;
-    setAccessToken(accessToken);
-    return accessToken;
   },
 };
