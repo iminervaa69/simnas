@@ -1,4 +1,3 @@
-// src/hooks/useAuth.tsx
 'use client'
 
 import React, { createContext, useContext, useEffect, useState } from 'react'
@@ -50,9 +49,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
-    checkAuth()
-  }, [])
-
+    let mounted = true;
+    
+    const checkAuthOnce = async () => {
+      if (mounted) {
+        await checkAuth();
+      }
+    };
+    
+    checkAuthOnce();
+    
+    return () => {
+      mounted = false;
+    };
+  }, []) 
+  
   const value = {
     user,
     isLoading,

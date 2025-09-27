@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { loginUser } from '@/lib/services/authService';
-import { getClientInfo } from '@/utils/clientInfo';
 
 export async function POST(request: NextRequest) {
   try {

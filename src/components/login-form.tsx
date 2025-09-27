@@ -1,5 +1,4 @@
 "use client"
-
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -51,7 +50,6 @@ export function LoginForm() {
       const response = await authApi.login(data.email, data.password)
       await login(response.user, response.accessToken)
       
-      // Redirect based on role
       switch (response.user.role) {
         case 'admin':
         case 'guru':

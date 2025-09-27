@@ -1,28 +1,41 @@
-import { NextApiResponse } from 'next';
-import { withAuth } from '@/lib/middlewares/middleware';
-import { AuthenticatedNextApiRequest, ApiResponse } from '@/types/api.types';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyAccessToken } from '@/lib/services/tokenService';
+import { getUserProfile } from '@/lib/services/authService';
 
-export default withAuth(async function handler(
-  req: AuthenticatedNextApiRequest,
-  res: NextApiResponse<ApiResponse>
-) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({
-      success: false,
-      error: 'Method not allowed'
-    });
-  }
-  
-  res.json({
-    success: true,
-    data: {
-      user: {
-        id: req.user!.userId,
-        email: req.user!.email,
-        role: req.user!.role,
-        firstName: req.user!.firstName,
-        lastName: req.user!.lastName
-      }
+export async function GET(request: NextRequest) {
+  try {
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.split(' ')[1];
+
+    if (!token) {
+      return NextResponse.json(
+        { success: false, error: 'Access token required' },
+        { status: 401 }
+      );
     }
-  });
-});
+
+    const payload = verifyAccessToken(token);
+    const user = await getUserProfile(payload.userId);
+
+    return NextResponse.json({
+      success: true,
+      data: { user },
+      message: 'User data retrieved successfully'
+    });
+
+  } catch (error: any) {
+    console.error('Get user error:', error);
+    
+    if (error.message.includes('Invalid') || error.message.includes('expired')) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid or expired token' },
+        { status: 401 }
+      );
+    }
+
+    return NextResponse.json(
+      { success: false, error: 'Failed to get user data' },
+      { status: 500 }
+    );
+  }
+}

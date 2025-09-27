@@ -1,4 +1,3 @@
-// src/app/(auth)/login/page.tsx
 import { BookOpen } from "lucide-react"
 import { LoginForm } from "@/components/login-form"
 
@@ -27,12 +26,11 @@ export default function LoginPage() {
         </div>
       </div>
       <div className="bg-muted relative hidden lg:block">
-        <img
+        {/* <img
           src="/images/students-internship.jpg"
           alt="Students in internship"
           className="absolute inset-0 h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
-        />
-        {/* Overlay with some text */}
+        /> */}
         <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/40 to-background/40" />
         <div className="absolute bottom-6 left-6 text-white">
           <blockquote className="space-y-2">
