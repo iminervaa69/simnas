@@ -1,56 +1,52 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { verifyAccessToken } from '@/lib/services/tokenService'
+import { hasRouteAccess } from '@/config/permissions'
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   
-  // Skip middleware for API routes and static files
   if (
     pathname.startsWith('/api/') ||
     pathname.startsWith('/_next/') ||
-    pathname.includes('.')
+    pathname.includes('.') ||
+    pathname === '/login'
   ) {
     return NextResponse.next()
   }
 
-  console.log('🔍 Middleware: Checking path:', pathname)
-  
   const refreshToken = request.cookies.get('refreshToken')?.value
-  console.log('🔍 Middleware: Has refresh token:', !!refreshToken)
-  
-  // Debug: log all cookies
-  const allCookies = request.cookies.getAll()
-  console.log('🍪 Middleware: All cookies:', allCookies.map(c => c.name).join(', '))
 
-  // Public routes that don't require auth
-  const publicRoutes = ['/login']
-  const isPublicRoute = publicRoutes.includes(pathname)
-
-  // If no token and trying to access protected route
-  if (!refreshToken && !isPublicRoute) {
-    console.log('🔄 Middleware: No token, redirecting to login')
+  if (!refreshToken) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // If has token and trying to access login page
-  if (refreshToken && pathname === '/login') {
-    console.log('🔄 Middleware: Has token but on login page, redirecting to dashboard')
-    return NextResponse.redirect(new URL('/dashboard', request.url))
-  }
+  try {
+    const payload = verifyAccessToken(refreshToken)
+    const userRole = payload.role
 
-  console.log('✅ Middleware: Allowing access to:', pathname)
-  return NextResponse.next()
+    if (!hasRouteAccess(pathname, userRole)) {
+
+      const fallbackRoutes = {
+        admin: '/dashboard',
+        guru: '/dashboard', 
+        siswa: '/dashboard'
+      }
+
+      return NextResponse.redirect(
+        new URL(fallbackRoutes[userRole] || '/dashboard', request.url)
+      )
+    }
+    
+    return NextResponse.next()
+    
+  } catch (error) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
     '/((?!api|_next/static|_next/image|favicon.ico).*)',
   ],
 }
