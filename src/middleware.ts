@@ -17,6 +17,10 @@ export function middleware(request: NextRequest) {
   
   const refreshToken = request.cookies.get('refreshToken')?.value
   console.log('🔍 Middleware: Has refresh token:', !!refreshToken)
+  
+  // Debug: log all cookies
+  const allCookies = request.cookies.getAll()
+  console.log('🍪 Middleware: All cookies:', allCookies.map(c => c.name).join(', '))
 
   // Public routes that don't require auth
   const publicRoutes = ['/login']
@@ -34,6 +38,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
+  console.log('✅ Middleware: Allowing access to:', pathname)
   return NextResponse.next()
 }
 

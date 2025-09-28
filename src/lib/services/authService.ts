@@ -73,6 +73,8 @@ export async function loginUser(
   
   await query('UPDATE users SET updated_at = NOW() WHERE id = $1', [user.id]);
   
+  console.log('🔄 AuthService: Login successful, returning tokens');
+  
   return {
     user: {
       id: user.id,
@@ -84,6 +86,7 @@ export async function loginUser(
       createdAt: user.created_at
     },
     accessToken,
+    refreshToken, // Make sure this is included
     message: 'Login successful'
   };
 }

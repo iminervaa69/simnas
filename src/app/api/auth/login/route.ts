@@ -7,6 +7,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { email, password } = body;
     
+    console.log('🔄 API: Login attempt for:', email);
+    
     if (!email || !password) {
       return NextResponse.json(
         { success: false, error: 'Email and password are required' },
@@ -22,17 +24,10 @@ export async function POST(request: NextRequest) {
     };
     
     const result = await loginUser(email.toLowerCase().trim(), password, clientInfo);
+    console.log('✅ API: Login successful for:', result.user.email, result.user.role);
     
-    const cookieStore = await cookies();
-    cookieStore.set('refreshToken', result.refreshToken!, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60,
-      path: '/'
-    });
-    
-    return NextResponse.json({
+    // Create response first
+    const response = NextResponse.json({
       success: true,
       data: {
         user: result.user,
@@ -41,8 +36,21 @@ export async function POST(request: NextRequest) {
       message: result.message
     });
     
+    // Set cookie on the response directly
+    response.cookies.set('refreshToken', result.refreshToken!, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60,
+      path: '/'
+    });
+    
+    console.log('🍪 API: Refresh token cookie set');
+    
+    return response;
+    
   } catch (error: any) {
-    console.error('Login error:', error);
+    console.error('❌ API: Login error:', error);
     
     if (error.message.includes('Invalid email or password')) {
       return NextResponse.json(

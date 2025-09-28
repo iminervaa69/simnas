@@ -1,151 +1,112 @@
-"use client"
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
-import { z } from "zod"
-import { Eye, EyeOff, Loader2 } from "lucide-react"
+'use client'
 
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Alert, AlertDescription } from "@/components/ui/alert" 
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form"
-import { authApi } from "@/lib/authClient"
-import { useAuth } from "@/hooks/useAuth"
-
-const loginSchema = z.object({
-  email: z.string().email("Email tidak valid"),
-  password: z.string().min(1, "Password wajib diisi"),
-})
-
-type LoginFormValues = z.infer<typeof loginSchema>
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { useAuth } from '@/hooks/useAuth'
 
 export function LoginForm() {
-  const router = useRouter()
-  const { login } = useAuth()
-  const [showPassword, setShowPassword] = useState(false)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState('')
+  
+  const { login } = useAuth()
+  const router = useRouter()
 
-  const form = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-    },
-  })
-
-  async function onSubmit(data: LoginFormValues) {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
     setIsLoading(true)
-    setError(null)
-    
+    setError('')
+
     try {
-      const response = await authApi.login(data.email, data.password)
-      await login(response.user, response.accessToken)
+      console.log('🔄 Client: Attempting login for:', email)
       
-      switch (response.user.role) {
-        case 'admin':
-        case 'guru':
-        case 'siswa':
-          router.push('/dashboard')
-          break
-        default:
-          router.push('/dashboard')
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // Important for cookies
+        body: JSON.stringify({ email, password }),
+      })
+
+      const data = await response.json()
+      console.log('📊 Client: Login response:', { success: data.success, hasUser: !!data.data?.user })
+
+      if (!data.success) {
+        throw new Error(data.error || 'Login failed')
       }
+
+      // Update client auth state
+      await login(data.data.user, data.data.accessToken)
+      console.log('✅ Client: Auth state updated')
+      
+      // Add a small delay to ensure cookie is set
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      // Use router.push for client-side navigation
+      console.log('🔄 Client: Navigating to dashboard')
+      router.push('/dashboard')
+      router.refresh() // Force refresh to ensure server-side auth check
+      
     } catch (err: any) {
-      setError(err.message || 'Terjadi kesalahan saat login')
+      console.error('❌ Client: Login error:', err.message)
+      setError(err.message || 'Login failed')
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
+    <Card className="w-full max-w-md">
+      <CardHeader>
+        <CardTitle>Login</CardTitle>
+        <CardDescription>Masuk ke akun Anda</CardDescription>
+      </CardHeader>
+      <form onSubmit={handleSubmit}>
+        <CardContent className="space-y-4">
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              disabled={isLoading}
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              disabled={isLoading}
+            />
+          </div>
+        </CardContent>
         
-        <FormField
-          control={form.control}
-          name="email"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Email</FormLabel>
-              <FormControl>
-                <Input
-                  type="email"
-                  placeholder="nama@email.com"
-                  autoComplete="email"
-                  disabled={isLoading}
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        
-        <FormField
-          control={form.control}
-          name="password"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Password</FormLabel>
-              <FormControl>
-                <div className="relative">
-                  <Input
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Masukkan password"
-                    autoComplete="current-password"
-                    disabled={isLoading}
-                    {...field}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                    onClick={() => setShowPassword(!showPassword)}
-                    disabled={isLoading}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <Button 
-          type="submit" 
-          className="w-full"
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Masuk...
-            </>
-          ) : (
-            'Masuk'
-          )}
-        </Button>
+        <CardFooter>
+          <Button type="submit" className="w-full" disabled={isLoading}>
+            {isLoading ? 'Logging in...' : 'Login'}
+          </Button>
+        </CardFooter>
       </form>
-    </Form>
+    </Card>
   )
 }

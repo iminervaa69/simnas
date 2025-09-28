@@ -1,79 +1,212 @@
 'use client'
 
+import * as React from "react"
 import { 
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarTrigger
+  SidebarRail,
 } from "@/components/ui/sidebar"
 import { UserResponse } from "@/types/user.types"
-import { AdminSidebarItems } from "./admin-sidebar-items"
-import { GuruSidebarItems } from "./guru-sidebar-items"
-import { SiswaSidebarItems } from "./siswa-sidebar-items"
-import { BookOpen, LogOut } from "lucide-react"
+import { NavMain } from "@/components/nav-main"
+import { NavUser } from "@/components/nav-user"
+import { TeamSwitcher } from "@/components/team-switcher"
+import {
+  BookOpen,
+  Building2,
+  FileText,
+  GraduationCap,
+  Home,
+  Settings,
+  Users,
+  User,
+} from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
 
-interface DynamicSidebarProps {
+interface DynamicSidebarProps extends React.ComponentProps<typeof Sidebar> {
   user: UserResponse
 }
 
-export function DynamicSidebar({ user }: DynamicSidebarProps) {
+export function DynamicSidebar({ user, ...props }: DynamicSidebarProps) {
   const { logout } = useAuth()
 
-  const handleLogout = async () => {
-    await logout()
-    window.location.href = '/login'
-  }
+  const getNavigationData = () => {
+    const baseTeam = {
+      name: "SIMMAS",
+      logo: BookOpen,
+      plan: "Sistem Magang Siswa",
+    }
 
-  const renderSidebarItems = () => {
     switch (user.role) {
       case 'admin':
-        return <AdminSidebarItems />
+        return {
+          teams: [baseTeam],
+          navMain: [
+            {
+              title: "Dashboard",
+              url: "/dashboard",
+              icon: Home,
+              isActive: true,
+            },
+            {
+              title: "Manajemen",
+              url: "#",
+              icon: Settings,
+              items: [
+                {
+                  title: "DUDI",
+                  url: "/dashboard/dudi",
+                },
+                {
+                  title: "Pengguna",
+                  url: "/dashboard/users",
+                },
+                {
+                  title: "Pengaturan Sekolah",
+                  url: "/dashboard/settings",
+                },
+              ],
+            },
+            {
+              title: "Magang",
+              url: "#",
+              icon: GraduationCap,
+              items: [
+                {
+                  title: "Data Magang",
+                  url: "/dashboard/internships",
+                },
+                {
+                  title: "Jurnal Harian",
+                  url: "/dashboard/journals",
+                },
+                {
+                  title: "Penempatan",
+                  url: "/dashboard/placements",
+                },
+              ],
+            },
+            {
+              title: "Laporan",
+              url: "/dashboard/reports",
+              icon: FileText,
+            },
+          ],
+        }
+
       case 'guru':
-        return <GuruSidebarItems />
+        return {
+          teams: [baseTeam],
+          navMain: [
+            {
+              title: "Dashboard",
+              url: "/dashboard",
+              icon: Home,
+              isActive: true,
+            },
+            {
+              title: "DUDI",
+              url: "/dashboard/dudi",
+              icon: Building2,
+            },
+            {
+              title: "Siswa Bimbingan",
+              url: "#",
+              icon: GraduationCap,
+              items: [
+                {
+                  title: "Data Magang",
+                  url: "/dashboard/internships",
+                },
+                {
+                  title: "Jurnal Harian",
+                  url: "/dashboard/journals",
+                },
+                {
+                  title: "Penilaian",
+                  url: "/dashboard/assessments",
+                },
+              ],
+            },
+            {
+              title: "Laporan",
+              url: "/dashboard/reports",
+              icon: FileText,
+            },
+          ],
+        }
+
       case 'siswa':
-        return <SiswaSidebarItems />
+        return {
+          teams: [baseTeam],
+          navMain: [
+            {
+              title: "Dashboard",
+              url: "/dashboard",
+              icon: Home,
+              isActive: true,
+            },
+            {
+              title: "DUDI",
+              url: "/dashboard/dudi",
+              icon: Building2,
+            },
+            {
+              title: "Magang Saya",
+              url: "#",
+              icon: GraduationCap,
+              items: [
+                {
+                  title: "Data Magang",
+                  url: "/dashboard/my-internship",
+                },
+                {
+                  title: "Jurnal Harian",
+                  url: "/dashboard/journals",
+                },
+                {
+                  title: "Progress",
+                  url: "/dashboard/progress",
+                },
+              ],
+            },
+            {
+              title: "Profil",
+              url: "/dashboard/profile",
+              icon: User,
+            },
+          ],
+        }
+
       default:
-        return null
+        return {
+          teams: [baseTeam],
+          navMain: [],
+        }
     }
   }
 
+  const navigationData = getNavigationData()
+
+  const userData = {
+    name: user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : user.email,
+    email: user.email,
+    avatar: "", // You can add avatar URL here later
+  }
+
   return (
-    <Sidebar variant="inset">
+    <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg">
-              <div className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-lg">
-                <BookOpen className="size-4" />
-              </div>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">SIMMAS</span>
-                <span className="truncate text-xs">Sistem Magang Siswa</span>
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <TeamSwitcher teams={navigationData.teams} />
       </SidebarHeader>
-      
       <SidebarContent>
-        {renderSidebarItems()}
+        <NavMain items={navigationData.navMain} />
       </SidebarContent>
-      
       <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton onClick={handleLogout}>
-              <LogOut className="size-4" />
-              <span>Logout</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <NavUser user={userData} />
       </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   )
 }
