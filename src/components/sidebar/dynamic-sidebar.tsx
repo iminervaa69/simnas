@@ -177,6 +177,7 @@ export function DynamicSidebar({ user, ...props }: DynamicSidebarProps) {
               icon: User,
             },
           ],
+          
         }
 
       default:

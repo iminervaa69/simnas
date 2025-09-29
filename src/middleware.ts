@@ -1,11 +1,11 @@
+// src/middleware.ts
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { verifyAccessToken } from '@/lib/services/tokenService'
-import { hasRouteAccess } from '@/config/permissions'
 
-export async function middleware(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   
+  // Skip middleware for API routes, static files, and auth pages
   if (
     pathname.startsWith('/api/') ||
     pathname.startsWith('/_next/') ||
@@ -15,34 +15,30 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
+  console.log('🔍 Middleware: Checking access for:', pathname)
+  
   const refreshToken = request.cookies.get('refreshToken')?.value
+  
+  // Public routes that don't require auth
+  const publicRoutes = ['/login']
+  const isPublicRoute = publicRoutes.includes(pathname)
 
-  if (!refreshToken) {
+  // If no token and trying to access protected route
+  if (!refreshToken && !isPublicRoute) {
+    console.log('🔄 Middleware: No token, redirecting to login')
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  try {
-    const payload = verifyAccessToken(refreshToken)
-    const userRole = payload.role
-
-    if (!hasRouteAccess(pathname, userRole)) {
-
-      const fallbackRoutes = {
-        admin: '/dashboard',
-        guru: '/dashboard', 
-        siswa: '/dashboard'
-      }
-
-      return NextResponse.redirect(
-        new URL(fallbackRoutes[userRole] || '/dashboard', request.url)
-      )
-    }
-    
-    return NextResponse.next()
-    
-  } catch (error) {
-    return NextResponse.redirect(new URL('/login', request.url))
+  // If has token and trying to access login page
+  if (refreshToken && pathname === '/login') {
+    console.log('🔄 Middleware: Has token but on login page, redirecting to dashboard')
+    return NextResponse.redirect(new URL('/dashboard', request.url))
   }
+
+  // For dashboard routes, we'll let the server components handle role-based access
+  // This avoids the crypto module issue in Edge Runtime
+  console.log('✅ Middleware: Token present, allowing access')
+  return NextResponse.next()
 }
 
 export const config = {

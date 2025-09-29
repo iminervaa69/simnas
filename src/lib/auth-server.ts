@@ -1,70 +1,81 @@
-import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
-import { validateRefreshToken } from '@/lib/services/tokenService';
-import { getUserProfile } from '@/lib/services/authService';
-import { UserResponse } from '@/types/user.types';
+// src/lib/auth-server.ts
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
+import { validateRefreshToken } from '@/lib/services/tokenService'
+import { UserResponse } from '@/types/user.types'
+import { hasRouteAccess, UserRole } from '@/config/permissions'
 
 export async function getCurrentUser(): Promise<UserResponse | null> {
   try {
-    const cookieStore = await cookies();
-    const refreshToken = cookieStore.get('refreshToken')?.value;
-
-    console.log('🔍 Server: Checking auth, refreshToken exists:', !!refreshToken);
-
-    if (!refreshToken) {
-      console.log('❌ Server: No refresh token found');
-      return null;
-    }
-
-    const tokenData = await validateRefreshToken(refreshToken);
+    const cookieStore = await cookies()
+    const refreshToken = cookieStore.get('refreshToken')?.value
     
-    if (!tokenData.isValid || !tokenData.userId) {
-      console.log('❌ Server: Invalid refresh token');
-      return null;
+    if (!refreshToken) {
+      return null
     }
 
-    console.log('✅ Server: Valid token for user:', tokenData.userId);
-    const user = await getUserProfile(tokenData.userId);
-    console.log('✅ Server: User profile loaded:', user.email, user.role);
-    return user;
+    // Validate refresh token and get user data
+    const validation = await validateRefreshToken(refreshToken)
+    
+    if (!validation.isValid || !validation.user) {
+      return null
+    }
+
+    const user = validation.user
+    
+    // Convert to UserResponse format
+    const userResponse: UserResponse = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      firstName: user.first_name || undefined,
+      lastName: user.last_name || undefined,
+      phone: user.phone || undefined,
+      isVerified: user.is_verified || false,
+      createdAt: user.created_at
+    }
+    
+    return userResponse
+    
   } catch (error) {
-    console.error('❌ Server: Get current user error:', error);
-    return null;
+    console.error('❌ Server: Auth check failed:', error)
+    return null
   }
 }
 
 export async function requireAuth(): Promise<UserResponse> {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser()
   
   if (!user) {
-    console.log('🔄 Server: No user found, redirecting to login');
-    redirect('/login');
+    console.log('❌ Server: No authenticated user, redirecting to login')
+    redirect('/login')
   }
   
-  console.log('✅ Server: User authenticated:', user.email);
-  return user;
+  return user
 }
 
-export async function requireRole(allowedRoles: string[]): Promise<UserResponse> {
-  const user = await requireAuth();
+// Enhanced function that also checks route permissions
+export async function requireAuthWithPermissions(
+  requiredPath?: string
+): Promise<UserResponse> {
+  const user = await requireAuth()
   
-  if (!allowedRoles.includes(user.role)) {
-    redirect('/unauthorized');
+  if (requiredPath) {
+    const hasAccess = hasRouteAccess(requiredPath, user.role as UserRole)
+    
+    if (!hasAccess) {
+      console.log(`❌ Server: User ${user.role} denied access to ${requiredPath}`)
+      
+      // Redirect to appropriate dashboard based on role
+      const fallbackRoutes = {
+        admin: '/dashboard',
+        guru: '/dashboard', 
+        siswa: '/dashboard'
+      }
+      
+      redirect(fallbackRoutes[user.role as UserRole] || '/dashboard')
+    }
   }
   
-  return user;
+  return user
 }
-
-// Utility to check auth without redirecting
-export async function checkAuth(): Promise<{ isAuthenticated: boolean; user: UserResponse | null }> {
-  const user = await getCurrentUser();
-  return {
-    isAuthenticated: !!user,
-    user
-  };
-}
-
-// Role-specific auth helpers
-export const requireAdmin = () => requireRole(['admin']);
-export const requireGuru = () => requireRole(['admin', 'guru']);
-export const requireSiswa = () => requireRole(['admin', 'siswa']);

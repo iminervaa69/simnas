@@ -1,12 +1,11 @@
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { query } from '@/lib/database/connection';
-import { JWTPayload } from '@/types/auth.types';
+import { JWTPayload, ClientInfo } from '@/types/auth.types';
 import { User } from '@/types/user.types';
-import ms from 'ms';
 
 const JWT_SECRET = process.env.JWT_SECRET!;
-const ACCESS_TOKEN_EXPIRES_IN = 15 * 60 * 1000;
+const ACCESS_TOKEN_EXPIRES_IN = 15 * 60 * 1000; // 15 minutes
 
 export function generateAccessToken(user: User): string {
   const payload: Omit<JWTPayload, 'iat' | 'exp'> = {
@@ -17,10 +16,8 @@ export function generateAccessToken(user: User): string {
     lastName: user.last_name
   };
   
-  // const expiresIn = ms(ACCESS_TOKEN_EXPIRES_IN);
-  
   return jwt.sign(payload, JWT_SECRET, {
-    expiresIn: ACCESS_TOKEN_EXPIRES_IN  // Use string directly
+    expiresIn: '15m'  // Use string format
   });
 }
 
@@ -46,12 +43,56 @@ export async function storeRefreshToken(
   return result.rows[0];
 }
 
+// This function should only be used in server components/API routes
+// NOT in middleware (Edge Runtime)
 export function verifyAccessToken(token: string): JWTPayload {
   try {
     return jwt.verify(token, JWT_SECRET) as JWTPayload;
   } catch (error) {
     throw new Error('Invalid or expired access token');
   }
+}
+
+// NEW: Missing refreshAccessToken function
+export async function refreshAccessToken(
+  refreshToken: string,
+  clientInfo?: ClientInfo
+): Promise<{
+  accessToken: string;
+  refreshToken: string;
+  userId: string;
+  user: User;
+}> {
+  // Validate the refresh token and get user
+  const validation = await validateRefreshToken(refreshToken);
+  
+  if (!validation.isValid || !validation.user) {
+    throw new Error('Invalid refresh token');
+  }
+
+  const user = validation.user;
+  
+  // Generate new tokens
+  const newAccessToken = generateAccessToken(user);
+  const newRefreshToken = generateRefreshToken();
+  
+  // Revoke old refresh token
+  await revokeRefreshToken(refreshToken);
+  
+  // Store new refresh token
+  await storeRefreshToken(
+    user.id,
+    newRefreshToken,
+    clientInfo?.deviceInfo,
+    clientInfo?.ipAddress
+  );
+  
+  return {
+    accessToken: newAccessToken,
+    refreshToken: newRefreshToken,
+    userId: user.id,
+    user
+  };
 }
 
 // Updated function - only needs token, finds user from token
@@ -73,7 +114,7 @@ export async function validateRefreshToken(
   
   // Check if the token is expired
   if (new Date() > new Date(row.expires_at)) {
-    // Optionally clean up expired token
+    // Clean up expired token
     await query(
       'UPDATE refresh_tokens SET revoked_at = NOW() WHERE token = $1',
       [token]
@@ -95,6 +136,7 @@ export async function validateRefreshToken(
     first_name: row.first_name,
     last_name: row.last_name,
     phone: row.phone,
+    is_verified: row.is_verified,
     created_at: row.created_at,
     updated_at: row.updated_at,
     deleted_at: row.deleted_at
@@ -107,7 +149,6 @@ export async function validateRefreshToken(
   };
 }
 
-// Updated function - only needs token
 export async function revokeRefreshToken(token: string): Promise<void> {
   await query(
     `UPDATE refresh_tokens 
@@ -117,7 +158,6 @@ export async function revokeRefreshToken(token: string): Promise<void> {
   );
 }
 
-// New function to revoke all tokens for a user
 export async function revokeAllRefreshTokens(userId: string): Promise<void> {
   await query(
     `UPDATE refresh_tokens 
@@ -127,7 +167,6 @@ export async function revokeAllRefreshTokens(userId: string): Promise<void> {
   );
 }
 
-// New function to revoke a specific token by ID (for session management)
 export async function revokeRefreshTokenById(tokenId: string, userId: string): Promise<void> {
   await query(
     `UPDATE refresh_tokens 
@@ -137,7 +176,6 @@ export async function revokeRefreshTokenById(tokenId: string, userId: string): P
   );
 }
 
-// New function to clean up expired tokens (can be called periodically)
 export async function cleanupExpiredTokens(): Promise<number> {
   const result = await query(
     `UPDATE refresh_tokens 
@@ -148,7 +186,6 @@ export async function cleanupExpiredTokens(): Promise<number> {
   return result.rowCount || 0;
 }
 
-// New function to get token info (useful for debugging/monitoring)
 export async function getRefreshTokenInfo(token: string): Promise<{
   id: string;
   userId: string;
@@ -187,7 +224,7 @@ export async function getRefreshTokenInfo(token: string): Promise<{
   };
 }
 
-// Legacy function for backward compatibility (if needed elsewhere)
+// Legacy functions for backward compatibility
 export async function validateRefreshTokenForUser(
   token: string, 
   userId: string
@@ -201,7 +238,6 @@ export async function validateRefreshTokenForUser(
   return { valid: true, user: result.user };
 }
 
-// Legacy function for backward compatibility (if needed elsewhere)
 export async function revokeRefreshTokenForUser(
   token: string, 
   userId: string

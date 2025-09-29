@@ -37,7 +37,7 @@ export default function LoginPage() {
             <p className="text-lg">
               "Sistem yang memudahkan pengelolaan magang siswa dengan fitur yang lengkap dan mudah digunakan."
             </p>
-            <footer className="text-sm">SMK Negeri 1 Surabaya</footer>
+            <footer className="text-sm">SMK Negeri 1 Jenagan</footer>
           </blockquote>
         </div>
       </div>

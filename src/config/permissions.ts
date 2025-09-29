@@ -19,7 +19,7 @@ export const ROUTE_PERMISSIONS = {
   
   // DUDI Management - detailed permissions
   '/dashboard/dudi': {
-    view: ['admin', 'guru', 'siswa'],
+    view: ['admin', 'guru'],
     create: ['admin'],
     edit: ['admin'],
     delete: ['admin']
