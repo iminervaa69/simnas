@@ -19,7 +19,7 @@ export const ROUTE_PERMISSIONS = {
   
   // DUDI Management - detailed permissions
   '/dashboard/dudi': {
-    view: ['admin', 'guru'],
+    view: ['admin'],
     create: ['admin'],
     edit: ['admin'],
     delete: ['admin']
@@ -27,6 +27,22 @@ export const ROUTE_PERMISSIONS = {
   
   // User Management - simple permission (admin only)
   '/dashboard/users': ['admin'] as UserRole[],
+  
+  // Periode Management - detailed permissions
+  '/dashboard/periode': {
+    view: ['admin'],
+    create: ['admin'],
+    edit: ['admin'],
+    delete: ['admin']
+  } as DetailedPermission,
+  
+  // Batch Management - detailed permissions
+  '/dashboard/batch': {
+    view: ['admin'],
+    create: ['admin'],
+    edit: ['admin'],
+    delete: ['admin']
+  } as DetailedPermission,
   
   // Students Management - detailed permissions
   '/dashboard/students': {
@@ -61,12 +77,10 @@ export const ROUTE_PERMISSIONS = {
   '/dashboard/reports': ['admin', 'guru'] as UserRole[]
 } as const
 
-// Type guard to check if permission config is detailed
 function isDetailedPermission(config: RoutePermission): config is DetailedPermission {
   return typeof config === 'object' && !Array.isArray(config)
 }
 
-// Type guard to check if permission config is simple
 function isSimplePermission(config: RoutePermission): config is SimplePermission {
   return Array.isArray(config)
 }

@@ -15,6 +15,44 @@ import {
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
+export const guruNavMainItems = [
+  {
+    title: "Dashboard",
+    url: "/dashboard",
+    icon: Home,
+    isActive: true,
+  },
+  {
+    title: "DUDI",
+    url: "/dashboard/dudi",
+    icon: Building2,
+  },
+  {
+    title: "Siswa Bimbingan",
+    url: "#",
+    icon: GraduationCap,
+    items: [
+      {
+        title: "Data Magang",
+        url: "/dashboard/internships",
+      },
+      {
+        title: "Jurnal Harian",
+        url: "/dashboard/journals",
+      },
+      {
+        title: "Penilaian",
+        url: "/dashboard/assessments",
+      },
+    ],
+  },
+  {
+    title: "Laporan",
+    url: "/dashboard/reports",
+    icon: FileText,
+  },
+]
+
 export function GuruSidebarItems() {
   const pathname = usePathname()
 

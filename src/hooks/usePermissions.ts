@@ -65,14 +65,11 @@ export function usePermissions(customPath?: string) {
     isAdminOrGuru: userRole ? RoleChecks.isAdminOrGuru(userRole) : false,
     isGuruOrSiswa: userRole ? RoleChecks.isGuruOrSiswa(userRole) : false,
     
-    // Current user info
     userRole,
     user,
     
-    // Current path info
     currentPath,
     
-    // Convenience methods for specific routes
     canManageUsers: can('view', '/dashboard/users'),
     canManageDudi: can('edit', '/dashboard/dudi'),
     canManageStudents: can('edit', '/dashboard/students'),
@@ -81,7 +78,6 @@ export function usePermissions(customPath?: string) {
   }
 }
 
-// Specialized hooks for specific contexts
 export function useDudiPermissions() {
   const permissions = usePermissions('/dashboard/dudi')
   

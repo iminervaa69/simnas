@@ -15,6 +15,44 @@ import {
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
+export const siswaNavMainItems = [
+  {
+    title: "Dashboard",
+    url: "/dashboard",
+    icon: Home,
+    isActive: true,
+  },
+  {
+    title: "DUDI",
+    url: "/dashboard/dudi",
+    icon: Building2,
+  },
+  {
+    title: "Magang Saya",
+    url: "#",
+    icon: GraduationCap,
+    items: [
+      {
+        title: "Data Magang",
+        url: "/dashboard/my-internship",
+      },
+      {
+        title: "Jurnal Harian",
+        url: "/dashboard/journals",
+      },
+      {
+        title: "Progress",
+        url: "/dashboard/progress",
+      },
+    ],
+  },
+  {
+    title: "Profil",
+    url: "/dashboard/profile",
+    icon: User,
+  },
+]
+
 export function SiswaSidebarItems() {
   const pathname = usePathname()
 

@@ -28,7 +28,7 @@ export interface Dudi {
   penanggung_jawab: string;
   bidang_usaha?: string;
   kuota_siswa?: number;
-  status: 'aktif' | 'tidak_aktif';
+  status: 'aktif' | 'tif';
   created_at: Date;
   updated_at: Date;
   deleted_at?: Date;

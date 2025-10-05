@@ -20,7 +20,21 @@ enum user_role {
 
 enum dudi_status {
   aktif
-  tidak_aktif
+  nonaktif
+}
+
+enum periode_status {
+  draft
+  aktif
+  selesai
+  dibatalkan
+}
+
+enum batch_status {
+  draft
+  aktif
+  selesai
+  dibatalkan
 }
 
 enum magang_status {
@@ -83,6 +97,10 @@ model users {
   jurnal_verifications  jurnal_harian[] @relation("JurnalVerifier")
   pendaftaran_magang    pendaftaran_magang[]
   processed_registrations pendaftaran_magang[] @relation("RegistrationProcessor")
+  
+  // Periode & Batch creation
+  created_periodes      periode_magang[] @relation("PeriodeCreator")
+  created_batches       batch_magang[] @relation("BatchCreator")
 
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
@@ -148,14 +166,72 @@ model dudi {
   @@map("dudi")
 }
 
-// Internship records
+// ==========================================
+// LEVEL 1: Periode Magang (Academic Year Level)
+// ==========================================
+model periode_magang {
+  id              String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  nama_periode    String          @db.VarChar
+  tahun_ajaran    String          @unique @db.VarChar
+  tanggal_mulai   DateTime        @db.Date
+  tanggal_selesai DateTime        @db.Date
+  status          periode_status  @default(draft)
+  deskripsi       String?
+  target_siswa    Int?
+  created_by      String?         @db.Uuid
+  created_at      DateTime?       @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime?       @default(now()) @db.Timestamptz(6)
+  deleted_at      DateTime?       @db.Timestamptz(6)
+
+  // Relationships
+  creator       users? @relation("PeriodeCreator", fields: [created_by], references: [id], onDelete: SetNull)
+  batch_magang  batch_magang[]
+
+  @@index([tahun_ajaran], map: "idx_periode_magang_tahun")
+  @@index([status], map: "idx_periode_magang_status")
+  @@map("periode_magang")
+}
+
+// ==========================================
+// LEVEL 2: Batch Magang (Cohort/Semester Level)
+// ==========================================
+model batch_magang {
+  id              String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  periode_id      String        @db.Uuid
+  nama_batch      String        @db.VarChar
+  semester        String        @db.VarChar
+  kelas_target    String[]      @db.VarChar
+  tanggal_mulai   DateTime      @db.Date
+  tanggal_selesai DateTime      @db.Date
+  kuota_siswa     Int?
+  status          batch_status  @default(draft)
+  deskripsi       String?
+  created_by      String?       @db.Uuid
+  created_at      DateTime?     @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime?     @default(now()) @db.Timestamptz(6)
+  deleted_at      DateTime?     @db.Timestamptz(6)
+
+  // Relationships
+  periode            periode_magang @relation(fields: [periode_id], references: [id], onDelete: Restrict)
+  creator            users? @relation("BatchCreator", fields: [created_by], references: [id], onDelete: SetNull)
+  magang             magang[]
+  pendaftaran_magang pendaftaran_magang[]
+
+  @@index([periode_id], map: "idx_batch_magang_periode")
+  @@index([status], map: "idx_batch_magang_status")
+  @@index([semester], map: "idx_batch_magang_semester")
+  @@map("batch_magang")
+}
+
+// ==========================================
+// LEVEL 3: Magang (Individual Internship Records)
+// ==========================================
 model magang {
   id                   String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  batch_id             String         @db.Uuid
   siswa_id             String         @db.Uuid
   guru_pembimbing_id   String         @db.Uuid
   dudi_id              String         @db.Uuid
-  tanggal_mulai        DateTime       @db.Date
-  tanggal_selesai      DateTime       @db.Date
   status               magang_status  @default(pending)
   nilai_akhir          Decimal?       @db.Decimal(5, 2)
   catatan_guru         String?
@@ -163,11 +239,14 @@ model magang {
   updated_at           DateTime?      @default(now()) @db.Timestamptz(6)
 
   // Relationships
-  siswa          users @relation("MagangSiswa", fields: [siswa_id], references: [id], onDelete: Cascade)
+  batch           batch_magang @relation(fields: [batch_id], references: [id], onDelete: Restrict)
+  siswa           users @relation("MagangSiswa", fields: [siswa_id], references: [id], onDelete: Cascade)
   guru_pembimbing users @relation("MagangGuru", fields: [guru_pembimbing_id], references: [id], onDelete: Restrict)
-  dudi           dudi  @relation(fields: [dudi_id], references: [id], onDelete: Restrict)
-  jurnal_harian  jurnal_harian[]
+  dudi            dudi  @relation(fields: [dudi_id], references: [id], onDelete: Restrict)
+  jurnal_harian   jurnal_harian[]
 
+  @@unique([siswa_id, batch_id], map: "unique_siswa_batch")
+  @@index([batch_id], map: "idx_magang_batch_id")
   @@index([siswa_id], map: "idx_magang_siswa_id")
   @@index([guru_pembimbing_id], map: "idx_magang_guru_id")
   @@index([dudi_id], map: "idx_magang_dudi_id")
@@ -204,9 +283,11 @@ model jurnal_harian {
 // Student internship registrations
 model pendaftaran_magang {
   id             String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  batch_id       String               @db.Uuid
   siswa_id       String               @db.Uuid
   dudi_id        String               @db.Uuid
   status         pendaftaran_status   @default(menunggu)
+  prioritas      Int?                 @default(1)
   tanggal_daftar DateTime?            @default(now()) @db.Timestamptz(6)
   catatan_siswa  String?
   catatan_admin  String?
@@ -215,11 +296,13 @@ model pendaftaran_magang {
   created_at     DateTime?            @default(now()) @db.Timestamptz(6)
 
   // Relationships
+  batch     batch_magang @relation(fields: [batch_id], references: [id], onDelete: Cascade)
   siswa     users @relation(fields: [siswa_id], references: [id], onDelete: Cascade)
   dudi      dudi  @relation(fields: [dudi_id], references: [id], onDelete: Cascade)
   processor users? @relation("RegistrationProcessor", fields: [processed_by], references: [id], onDelete: SetNull)
 
-  @@unique([siswa_id, dudi_id], map: "unique_siswa_dudi")
+  @@unique([siswa_id, dudi_id, batch_id], map: "unique_siswa_dudi_batch")
+  @@index([batch_id], map: "idx_pendaftaran_batch_id")
   @@index([siswa_id], map: "idx_pendaftaran_siswa")
   @@index([status], map: "idx_pendaftaran_status")
   @@map("pendaftaran_magang")

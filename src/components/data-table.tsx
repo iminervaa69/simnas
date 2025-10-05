@@ -28,11 +28,13 @@ import {
   IconChevronsRight,
   IconCircleCheckFilled,
   IconDotsVertical,
+  IconEdit,
   IconGripVertical,
   IconLayoutColumns,
   IconLoader,
   IconPlus,
   IconTrendingUp,
+  IconX,
 } from "@tabler/icons-react"
 import {
   ColumnDef,
@@ -90,6 +92,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
 import {
   Table,
@@ -130,6 +133,10 @@ export type FieldSchema = {
   min?: number
   max?: number
   pattern?: string
+  // Optional: configure badge icons by value
+  badgeIconMap?: Record<string, 'check' | 'spinner' | 'x' | 'edit' | 'check_circle'>
+  // Optional: extra class names per value (e.g., color)
+  badgeClassMap?: Record<string, string>
 }
 
 export type TableSchema = Record<string, FieldSchema>
@@ -140,6 +147,11 @@ export type TableFeatures = {
   enablePagination?: boolean
   enableColumnVisibility?: boolean
   enableActions?: boolean
+  customActions?: (row: DataRow) => React.ReactNode
+  customToolbar?: React.ReactNode
+  enableShowDeleted?: boolean
+  showDeleted?: boolean
+  onShowDeletedChange?: (showDeleted: boolean) => void
   pagination?: {
     pageSize?: number
     pageSizeOptions?: number[]
@@ -197,15 +209,28 @@ function renderCell(value: any, field: FieldSchema, row: DataRow): React.ReactNo
 
   if (field.badge) {
     const variant = 'outline'
-      return (
-        <Badge variant={variant} className="text-muted-foreground px-1.5">
-        {field.type === 'select' && value === 'Done' ? (
-            <IconCircleCheckFilled className="fill-green-500 dark:fill-green-400 mr-1" />
-        ) : field.type === 'select' && value === 'In Process' || 'In Progress' ? (
-            <IconCircleCheckFilled  className="mr-1 animate-spin" />
-        ) : null}
+    const raw = String(value)
+    const mappedClass = field.badgeClassMap?.[raw]
+    const iconType = field.badgeIconMap?.[raw]
+    return (
+      <Badge variant={variant} className={`text-muted-foreground px-1.5 ${mappedClass || ''}`}>
+        {iconType === 'check' && (
+          <IconCircleCheckFilled className="mr-1" />
+        )}
+        {iconType === 'spinner' && (
+          <IconCircleCheckFilled className="mr-1 animate-spin" />
+        )}
+        {iconType === 'x' && (
+          <IconX className="mr-1" />
+        )}
+        {iconType === 'edit' && (
+          <IconEdit className="mr-1" />
+        )}
+        {iconType === 'check_circle' && (
+          <IconCircleCheckFilled className="mr-1" />
+        )}
         {formattedValue}
-        </Badge>
+      </Badge>
     )
   }
   if (field.type === 'boolean') {
@@ -330,6 +355,40 @@ function generateColumns<T extends DataRow>(
     columns.push({
     accessorKey: key,
     header: ({ column }) => {
+        // Generic header select for any column that provides options in schema
+        if (Array.isArray(field.options) && field.options.length > 0) {
+          const ALL_VALUE = "__ALL__"
+          const current = (column.getFilterValue() as string) ?? ALL_VALUE
+          const options = field.options.map((opt) => typeof opt === 'string' ? { label: opt, value: opt } : opt)
+
+          return (
+            <div className={field.align === 'right' ? 'flex items-center justify-end gap-2' : 'flex items-center gap-2'}>
+              <span>{field.header}</span>
+              <Select
+                value={current}
+                onValueChange={(val) => {
+                  if (val === ALL_VALUE) {
+                    column.setFilterValue(undefined)
+                  } else {
+                    column.setFilterValue(val)
+                  }
+                }}
+              >
+                <SelectTrigger size="sm" className="w-28">
+                  <SelectValue placeholder={field.header} />
+                </SelectTrigger>
+                <SelectContent align="start">
+                  <SelectItem value={ALL_VALUE}>All</SelectItem>
+                  {options.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )
+        }
         if (field.align === 'right') {
         return (
             <div className="flex items-center justify-end">
@@ -372,7 +431,15 @@ function generateColumns<T extends DataRow>(
 
         return renderCell(value, field, row.original)
     },
-        enableSorting: field.sortable !== false,
+        enableSorting: (Array.isArray(field.options) && field.options.length > 0) ? false : field.sortable !== false,
+        // Ensure exact-match filtering for option-based columns to avoid substring matches
+        filterFn: (Array.isArray(field.options) && field.options.length > 0)
+          ? ((row, id, filterValue) => {
+              if (!filterValue) return true
+              const cell = row.getValue(id)
+              return String(cell) === String(filterValue)
+            })
+          : undefined,
         enableHiding: key !== Object.keys(schema)[0],
         size: typeof field.width === 'number' ? field.width : undefined,
     })
@@ -382,27 +449,35 @@ function generateColumns<T extends DataRow>(
   if (features.enableActions) {
     columns.push({
       id: "actions",
-      cell: () => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
-              size="icon"
-            >
-              <IconDotsVertical />
-              <span className="sr-only">Open menu</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-32">
-            <DropdownMenuItem>Edit</DropdownMenuItem>
-            <DropdownMenuItem>Make a copy</DropdownMenuItem>
-            <DropdownMenuItem>Favorite</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive">Delete</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ),
+      cell: ({ row }) => {
+        // Use custom actions if provided, otherwise use default
+        if (features.customActions) {
+          return features.customActions(row.original)
+        }
+        
+        // Default actions
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
+                size="icon"
+              >
+                <IconDotsVertical />
+                <span className="sr-only">Open menu</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-32">
+              <DropdownMenuItem>Edit</DropdownMenuItem>
+              <DropdownMenuItem>Make a copy</DropdownMenuItem>
+              <DropdownMenuItem>Favorite</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive">Delete</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )
+      },
       size: 40,
     })
   }
@@ -605,10 +680,14 @@ export function DataTable<T extends DataRow>({
   data: initialData,
   schema,
   features = {},
+  onSearchChange,
+  onAddItem,
 }: {
   data: T[]
   schema: TableSchema
   features?: TableFeatures
+  onSearchChange?: (query: string, columns: string[]) => void
+  onAddItem?: () => void
 }) {
   const [data, setData] = React.useState(() => initialData)
   const [rowSelection, setRowSelection] = React.useState({})
@@ -619,6 +698,53 @@ export function DataTable<T extends DataRow>({
     pageIndex: 0,
     pageSize: features.pagination?.pageSize || 10,
   })
+  const [globalFilter, setGlobalFilter] = React.useState<string>("")
+  // If empty => search ALL data columns. Otherwise, restrict global search to these columns
+  const [searchColumns, setSearchColumns] = React.useState<string[]>([])
+  const [searchInput, setSearchInput] = React.useState<string>("")
+
+  // Sync internal data state with prop changes
+  React.useEffect(() => {
+    setData(initialData)
+    // Reset pagination to first page when data changes
+    setPagination(prev => ({ ...prev, pageIndex: 0 }))
+    // Clear any existing filters to show all data
+    setColumnFilters([])
+    setGlobalFilter("")
+    setSearchInput("")
+  }, [initialData])
+
+  // Debounce global search input -> table globalFilter
+  React.useEffect(() => {
+    const handle = setTimeout(() => {
+      setGlobalFilter(searchInput)
+      if (onSearchChange) {
+        onSearchChange(searchInput, searchColumns)
+      }
+    }, 300)
+    return () => clearTimeout(handle)
+  }, [searchInput, onSearchChange, searchColumns])
+
+  // Trigger search change when columns change (immediate)
+  React.useEffect(() => {
+    if (onSearchChange) {
+      onSearchChange(searchInput, searchColumns)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchColumns])
+
+  const dataColumnIds = React.useMemo(() => Object.keys(schema), [schema])
+  const searchTargetLabel = React.useMemo(() => {
+    if (searchColumns.length === 0) return "All columns"
+    if (searchColumns.length === 1) {
+      const key = searchColumns[0]
+      return schema[key]?.header || key
+    }
+    const first = searchColumns[0]
+    const firstLabel = schema[first]?.header || first
+    const more = searchColumns.length - 1
+    return `${firstLabel} +${more}`
+  }, [searchColumns, schema])
   
   const sortableId = React.useId()
   const sensors = useSensors(
@@ -642,6 +768,7 @@ export function DataTable<T extends DataRow>({
       columnVisibility,
       rowSelection,
       columnFilters,
+      globalFilter,
       pagination,
     },
     getRowId: (row) => row.id.toString(),
@@ -649,8 +776,25 @@ export function DataTable<T extends DataRow>({
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
+    onGlobalFilterChange: setGlobalFilter,
     onColumnVisibilityChange: setColumnVisibility,
     onPaginationChange: setPagination,
+    // Global search restricted to selected columns (or all when none selected)
+    globalFilterFn: (row, _columnId, filterValue) => {
+      const term = String(filterValue ?? "").toLowerCase().trim()
+      if (!term) return true
+      const keysToSearch = searchColumns.length === 0 ? dataColumnIds : searchColumns
+      for (const key of keysToSearch) {
+        const value = (row.original as Record<string, unknown>)[key]
+        if (value === null || value === undefined) continue
+        try {
+          if (String(value).toLowerCase().includes(term)) return true
+        } catch {
+          // ignore stringify errors
+        }
+      }
+      return false
+    },
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
@@ -709,46 +853,171 @@ export function DataTable<T extends DataRow>({
             </div>
           </>
         )}
-        <div className="flex items-center gap-2 ml-auto">
-          {features.enableColumnVisibility && (
+        {/* Mobile-first responsive layout */}
+        <div className="flex flex-col lg:flex-row gap-2 w-full">
+          {/* Top row: Search and custom toolbar */}
+          <div className="flex items-center gap-2 flex-1">
+            {/* Global search - takes full width on mobile */}
+            <div className="flex-1 min-w-0">
+              <Input
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search..."
+                className="h-8 w-full"
+              />
+            </div>
+            
+            {/* Search target badge - hidden on mobile */}
+            <Badge variant="secondary" className="h-8 items-center whitespace-nowrap hidden sm:flex">
+              {searchTargetLabel}
+            </Badge>
+          </div>
+
+          {/* Bottom row: Controls and filters */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Show Deleted switch */}
+            {features.enableShowDeleted && (
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="show-deleted-switch"
+                  checked={features.showDeleted || false}
+                  onCheckedChange={features.onShowDeletedChange}
+                />
+                <Label htmlFor="show-deleted-switch" className="text-sm font-medium">
+                  Show Deleted
+                </Label>
+              </div>
+            )}
+
+            {/* Custom toolbar */}
+            {features.customToolbar && (
+              <div className="flex items-center gap-2">
+                {features.customToolbar}
+              </div>
+            )}
+
+            {/* Choose which columns the global search applies to */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" className="h-8">
                   <IconLayoutColumns />
-                  <span className="hidden lg:inline">Customize Columns</span>
-                  <span className="lg:hidden">Columns</span>
+                  <span className="hidden lg:inline">Search In</span>
+                  <span className="lg:hidden">In</span>
                   <IconChevronDown />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                {table
-                  .getAllColumns()
-                  .filter(
-                    (column) =>
-                      typeof column.accessorFn !== "undefined" &&
-                      column.getCanHide()
-                  )
-                  .map((column) => {
-                    return (
-                      <DropdownMenuCheckboxItem
-                        key={column.id}
-                        className="capitalize"
-                        checked={column.getIsVisible()}
-                        onCheckedChange={(value) =>
-                          column.toggleVisibility(!!value)
-                        }
-                      >
-                        {column.id}
-                      </DropdownMenuCheckboxItem>
-                    )
-                  })}
+                <DropdownMenuItem onClick={() => setSearchColumns([])}>
+                  All columns
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {dataColumnIds.map((colId) => (
+                  <DropdownMenuItem key={colId} onClick={() => setSearchColumns([colId])}>
+                    {colId}
+                  </DropdownMenuItem>
+                ))}
               </DropdownMenuContent>
             </DropdownMenu>
-          )}
-          <Button variant="outline" size="sm">
-            <IconPlus />
-            <span className="hidden lg:inline">Add Item</span>
-          </Button>
+
+            {/* Per-column filters (for filterable fields) - hidden on mobile */}
+            <div className="hidden md:flex items-center gap-2">
+              {Object.entries(schema)
+                .filter(([_, field]) => field.filterable)
+                .map(([key, field]) => {
+                  const column = table.getColumn(key)
+                  if (!column) return null
+                  const value = (column.getFilterValue() as string) ?? ""
+
+                  if (field.type === 'select' && field.options) {
+                    const options = Array.isArray(field.options)
+                      ? field.options.map((opt) => typeof opt === 'string' ? { label: opt, value: opt } : opt)
+                      : []
+                    const ALL_VALUE = "__ALL__"
+                    const selected = value && value !== "" ? value : ALL_VALUE
+                    return (
+                      <Select
+                        key={key}
+                        value={selected}
+                        onValueChange={(val) => {
+                          if (val === ALL_VALUE) {
+                            column.setFilterValue(undefined)
+                          } else {
+                            column.setFilterValue(val)
+                          }
+                        }}
+                      >
+                        <SelectTrigger size="sm" className="w-32 h-8">
+                          <SelectValue placeholder={field.placeholder || field.header} />
+                        </SelectTrigger>
+                        <SelectContent align="end">
+                          <SelectItem value={ALL_VALUE}>All</SelectItem>
+                          {options.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )
+                  }
+
+                  return (
+                    <Input
+                      key={key}
+                      value={value}
+                      onChange={(e) => column.setFilterValue(e.target.value)}
+                      placeholder={field.placeholder || field.header}
+                      className="h-8 w-32"
+                    />
+                  )
+                })}
+            </div>
+
+            {/* Column visibility - hidden on mobile */}
+            {features.enableColumnVisibility && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 hidden md:flex">
+                    <IconLayoutColumns />
+                    <span className="hidden lg:inline">Columns</span>
+                    <IconChevronDown />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  {table
+                    .getAllColumns()
+                    .filter(
+                      (column) =>
+                        typeof column.accessorFn !== "undefined" &&
+                        column.getCanHide()
+                    )
+                    .map((column) => {
+                      return (
+                        <DropdownMenuCheckboxItem
+                          key={column.id}
+                          className="capitalize"
+                          checked={column.getIsVisible()}
+                          onCheckedChange={(value) =>
+                            column.toggleVisibility(!!value)
+                          }
+                        >
+                          {column.id}
+                        </DropdownMenuCheckboxItem>
+                      )
+                    })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+
+            {/* Add Item button */}
+            {onAddItem && (
+              <Button variant="outline" size="sm" onClick={onAddItem} className="h-8">
+                <IconPlus />
+                <span className="hidden lg:inline">Add Item</span>
+                <span className="lg:hidden">Add</span>
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -852,7 +1121,7 @@ export function DataTable<T extends DataRow>({
                             />
                           </SelectTrigger>
                           <SelectContent side="top">
-                            {(features.pagination?.pageSizeOptions || [10, 20, 30, 40, 50]).map((pageSize) => (
+                            {(features.pagination?.pageSizeOptions || [5, 10, 20, 25, 30, 40, 50]).map((pageSize) => (
                               <SelectItem key={pageSize} value={`${pageSize}`}>
                                 {pageSize}
                               </SelectItem>

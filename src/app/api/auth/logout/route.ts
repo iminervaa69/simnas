@@ -14,6 +14,16 @@ export async function POST(request: NextRequest) {
     // Clear refresh token cookie
     cookieStore.delete('refreshToken');
     
+    // Clear tab-related cookies
+    cookieStore.delete('globalTabs');
+    
+    // Clear all form draft cookies (they start with 'formDraft_')
+    // Note: We can't enumerate all cookies, but we can set a flag to clear them on the client side
+    cookieStore.set('clearTabCookies', 'true', { 
+      path: '/', 
+      maxAge: 1 // Expires in 1 second
+    });
+    
     return NextResponse.json({
       success: true,
       message: 'Logged out successfully'
@@ -25,6 +35,16 @@ export async function POST(request: NextRequest) {
     // Still clear the cookie even if logout fails
     const cookieStore = await cookies();
     cookieStore.delete('refreshToken');
+    
+    // Clear tab-related cookies
+    cookieStore.delete('globalTabs');
+    
+    // Clear all form draft cookies (they start with 'formDraft_')
+    // Note: We can't enumerate all cookies, but we can set a flag to clear them on the client side
+    cookieStore.set('clearTabCookies', 'true', { 
+      path: '/', 
+      maxAge: 1 // Expires in 1 second
+    });
     
     return NextResponse.json({
       success: true,

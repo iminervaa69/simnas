@@ -27,7 +27,7 @@ import {
 import { 
   Building2, 
   CheckCircle,
-  XCircleIcon
+  XCircleIcon,
 } from "lucide-react"
 import { check } from "zod"
 
@@ -130,34 +130,73 @@ function getTrendConfig(trend: 'up' | 'down' | 'neutral') {
 // Generate grid classes based on columns config
 function generateGridClasses(columns?: SectionCardsConfig['columns']): string {
   const mobile = columns?.mobile || 1
-  const tablet = columns?.tablet || 2
   const desktop = columns?.desktop || 3
   const large = columns?.large || 3
 
-  return `grid-cols-${mobile} @xl/main:grid-cols-${tablet} @5xl/main:grid-cols-${desktop}`
+  const classes: string[] = []
+
+  // Mobile grid cols (static literals so Tailwind can see them)
+  if (mobile === 1) classes.push('grid-cols-1')
+  if (mobile === 2) classes.push('grid-cols-2')
+  if (mobile === 3) classes.push('grid-cols-3')
+  if (mobile === 4) classes.push('grid-cols-4')
+  if (mobile === 5) classes.push('grid-cols-5')
+  if (mobile === 6) classes.push('grid-cols-6')
+
+  // Desktop grid cols at @xl/main
+  if (desktop === 1) classes.push('@xl/main:grid-cols-1')
+  if (desktop === 2) classes.push('@xl/main:grid-cols-2')
+  if (desktop === 3) classes.push('@xl/main:grid-cols-3')
+  if (desktop === 4) classes.push('@xl/main:grid-cols-4')
+  if (desktop === 5) classes.push('@xl/main:grid-cols-5')
+  if (desktop === 6) classes.push('@xl/main:grid-cols-6')
+
+  // Large grid cols at @5xl/main
+  if (large === 1) classes.push('@5xl/main:grid-cols-1')
+  if (large === 2) classes.push('@5xl/main:grid-cols-2')
+  if (large === 3) classes.push('@5xl/main:grid-cols-3')
+  if (large === 4) classes.push('@5xl/main:grid-cols-4')
+  if (large === 5) classes.push('@5xl/main:grid-cols-5')
+  if (large === 6) classes.push('@5xl/main:grid-cols-6')
+
+  return classes.join(' ')
 }
 
 function getCardSpanClasses(span?: CardSchema['span']): string {
-  let classes = ''
-  
-  if (span?.mobile && span.mobile > 1) {
-    classes += `col-span-${span.mobile} `
-  }
-  if (span?.tablet && span.tablet > 1) {
-    classes += `@xl/main:col-span-${span.tablet} `
-  }
-  if (span?.desktop && span.desktop > 1) {
-    classes += `@5xl/main:col-span-${span.desktop} `
-  }
-  
-  return classes.trim()
+  const classes: string[] = []
+
+  // Mobile spans
+  if (span?.mobile === 1) classes.push('col-span-1')
+  if (span?.mobile === 2) classes.push('col-span-2')
+  if (span?.mobile === 3) classes.push('col-span-3')
+  if (span?.mobile === 4) classes.push('col-span-4')
+  if (span?.mobile === 5) classes.push('col-span-5')
+  if (span?.mobile === 6) classes.push('col-span-6')
+
+  // Desktop spans at @xl/main
+  if (span?.desktop === 1) classes.push('@xl/main:col-span-1')
+  if (span?.desktop === 2) classes.push('@xl/main:col-span-2')
+  if (span?.desktop === 3) classes.push('@xl/main:col-span-3')
+  if (span?.desktop === 4) classes.push('@xl/main:col-span-4')
+  if (span?.desktop === 5) classes.push('@xl/main:col-span-5')
+  if (span?.desktop === 6) classes.push('@xl/main:col-span-6')
+
+  // Large spans at @5xl/main
+  if (span?.large === 1) classes.push('@5xl/main:col-span-1')
+  if (span?.large === 2) classes.push('@5xl/main:col-span-2')
+  if (span?.large === 3) classes.push('@5xl/main:col-span-3')
+  if (span?.large === 4) classes.push('@5xl/main:col-span-4')
+  if (span?.large === 5) classes.push('@5xl/main:col-span-5')
+  if (span?.large === 6) classes.push('@5xl/main:col-span-6')
+
+  return classes.join(' ')
 }
 
 export function SectionCards({ config }: { config: SectionCardsConfig }) {
   const gridClasses = generateGridClasses(config.columns)
 
   return (
-    <div className={`*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs lg:px-6 ${gridClasses} ${config.className || ''}`}>
+    <div className={`@container/main *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs lg:px-6 ${gridClasses} ${config.className || ''}`}>
       {config.cards.map((card, index) => {
         const trendConfig = card.change ? getTrendConfig(card.change.trend) : null
         const TrendIcon = trendConfig?.icon

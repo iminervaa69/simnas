@@ -61,7 +61,7 @@ export async function requireAuthWithPermissions(
   const user = await requireAuth()
   
   if (requiredPath) {
-    const hasAccess = hasRouteAccess(requiredPath, user.role as UserRole)
+    const hasAccess = hasRouteAccess(requiredPath, user.role as UserRole) 
     
     if (!hasAccess) {
       console.log(`❌ Server: User ${user.role} denied access to ${requiredPath}`)

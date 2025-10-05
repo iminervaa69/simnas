@@ -1,21 +1,34 @@
-// Method 1: Using Supabase Client (Recommended)
-// First install: npm install @supabase/supabase-js
-
 import { createClient } from '@supabase/supabase-js'
+import { 
+  getDatabaseMode, 
+  getSupabaseConfig, 
+  isOnlineMode,
+  logDatabaseConfig 
+} from './config'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+// Initialize Supabase clients only when in online mode
+let supabase: any = null
+let supabaseAdmin: any = null
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+if (isOnlineMode()) {
+  const config = getSupabaseConfig()
+  if (config.url && config.anonKey) {
+    supabase = createClient(config.url, config.anonKey)
+    
+    if (config.serviceRoleKey) {
+      supabaseAdmin = createClient(config.url, config.serviceRoleKey)
+    }
+  }
+}
 
-// For server-side operations with service role key
-export const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+export { supabase, supabaseAdmin }
 
-// Example usage
+// Example usage (only works in online mode)
 export async function getUsers() {
+  if (!isOnlineMode() || !supabase) {
+    throw new Error('Supabase client is only available in online mode')
+  }
+  
   const { data, error } = await supabase
     .from('users')
     .select('*')
@@ -28,61 +41,35 @@ export async function getUsers() {
   return data
 }
 
-// Method 2: Direct PostgreSQL connection using your environment variables
+// Method 2: Direct PostgreSQL connection using dynamic configuration
 // Install: npm install pg @types/pg
 
 import { Pool, QueryResult } from 'pg'
-
-interface DatabaseConfig {
-  host: string
-  port: number
-  database: string
-  user: string
-  password: string
-  ssl: {
-    rejectUnauthorized: boolean
-  }
-}
-
-// Using your pooled connection (recommended for production)
-const dbConfig: DatabaseConfig = {
-  host: process.env.DB_HOST!, // aws-1-ap-southeast-1.pooler.supabase.com
-  port: parseInt(process.env.DB_PORT!), // 6543
-  database: process.env.DB_NAME!, // postgres
-  user: process.env.DB_USER!, // postgres.rqjvlgzfuzapvfnyzyvj
-  password: process.env.DB_PASSWORD!, // YtRgkP8J8RNA&1Zb3u#&
-  ssl: {
-    rejectUnauthorized: false
-  }
-}
-
-// Alternative: Direct connection fallback
-const dbDirectConfig: DatabaseConfig = {
-  host: process.env.DB_DIRECT_HOST!, // db.rqjvlgzfuzapvfnyzyvj.supabase.co
-  port: parseInt(process.env.DB_DIRECT_PORT!), // 5432
-  database: process.env.DB_NAME!, // postgres
-  user: process.env.DB_DIRECT_USER!, // postgres
-  password: process.env.SUPABASE_PASSWORD!, // YtRgkP8J8RNA&1Zb3u#&
-  ssl: {
-    rejectUnauthorized: false
-  }
-}
+import { 
+  getCurrentDatabaseConfig, 
+  getDirectDatabaseConfig,
+  DatabaseConfig 
+} from './config'
 
 let pool: Pool
 
 function getPool(useDirectConnection = false): Pool {
   if (!pool) {
-    const config = useDirectConnection ? dbDirectConfig : dbConfig
-    console.log('Creating pool connection to:', {
+    const config = useDirectConnection ? getDirectDatabaseConfig() : getCurrentDatabaseConfig()
+    const mode = getDatabaseMode()
+    
+    console.log(`Creating ${mode} pool connection to:`, {
       host: config.host,
       port: config.port,
       database: config.database,
       user: config.user,
-      password: '***hidden***'
+      password: '***hidden***',
+      mode: mode
     })
     
     pool = new Pool({
       ...config,
+      ssl: config.ssl, // Use the SSL config directly (boolean or object)
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
@@ -93,7 +80,7 @@ function getPool(useDirectConnection = false): Pool {
     })
     
     pool.on('connect', () => {
-      console.log('✅ Connected to Supabase database via pool')
+      console.log(`✅ Connected to ${mode} database via pool`)
     })
   }
   
@@ -128,46 +115,54 @@ export async function query(text: string, params?: any[], useDirectConnection = 
 }
 
 export async function testConnection(): Promise<boolean> {
+  const mode = getDatabaseMode()
+  console.log(`🧪 Testing ${mode} database connection...`)
+  
   try {
     // First try pooled connection
     console.log('Testing pooled connection...')
     const result = await query('SELECT NOW() as current_time, version() as db_version')
-    console.log('✅ Database connected successfully via pooled connection!')
+    console.log(`✅ ${mode} database connected successfully via pooled connection!`)
     console.log('Current time:', result.rows[0].current_time)
     console.log('Database version:', result.rows[0].db_version)
     return true
   } catch (error: any) {
-    console.error('❌ Pooled connection failed:', error.message)
+    console.error(`❌ ${mode} pooled connection failed:`, error.message)
     
-    try {
-      // Try direct connection as fallback
-      console.log('Testing direct connection...')
-      const result = await query('SELECT NOW() as current_time, version() as db_version', [], true)
-      console.log('✅ Database connected successfully via direct connection!')
-      console.log('Current time:', result.rows[0].current_time)
-      console.log('Database version:', result.rows[0].db_version)
-      return true
-    } catch (directError: any) {
-      console.error('❌ Direct connection also failed:', directError.message)
-      return false
+    // Only try direct connection fallback in online mode
+    if (mode === 'online') {
+      try {
+        console.log('Testing direct connection fallback...')
+        const result = await query('SELECT NOW() as current_time, version() as db_version', [], true)
+        console.log('✅ Database connected successfully via direct connection!')
+        console.log('Current time:', result.rows[0].current_time)
+        console.log('Database version:', result.rows[0].db_version)
+        return true
+      } catch (directError: any) {
+        console.error('❌ Direct connection also failed:', directError.message)
+        return false
+      }
     }
+    
+    return false
   }
 }
 
 // Method 3: Using DATABASE_URL connection string (Alternative approach)
 import { Pool as URLPool } from 'pg'
+import { getDatabaseUrl } from './config'
 
 let urlPool: URLPool
 
 function getURLPool(): URLPool {
   if (!urlPool) {
-    console.log('Creating connection using DATABASE_URL...')
+    const databaseUrl = getDatabaseUrl()
+    const mode = getDatabaseMode()
+    console.log(`Creating ${mode} connection using DATABASE_URL...`)
     
     urlPool = new URLPool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: {
-        rejectUnauthorized: false
-      },
+      connectionString: databaseUrl,
+      ssl: mode === 'local' ? false : { rejectUnauthorized: false },
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
@@ -178,7 +173,7 @@ function getURLPool(): URLPool {
     })
     
     urlPool.on('connect', () => {
-      console.log('✅ Connected via DATABASE_URL')
+      console.log(`✅ Connected via DATABASE_URL (${mode} mode)`)
     })
   }
   
@@ -206,20 +201,33 @@ export async function queryWithURL(text: string, params?: any[]): Promise<QueryR
 
 // Test all connection methods
 export async function testAllConnections(): Promise<void> {
-  console.log('🧪 Testing all connection methods...\n')
+  const mode = getDatabaseMode()
+  console.log(`🧪 Testing all connection methods for ${mode} mode...\n`)
   
-  // Test 1: Supabase Client
-  try {
-    console.log('1. Testing Supabase Client...')
-    const { data, error } = await supabase
-      .from('information_schema.tables')
-      .select('table_name')
-      .limit(1)
-    
-    if (error) throw error
-    console.log('✅ Supabase Client: Working\n')
-  } catch (error: any) {
-    console.error('❌ Supabase Client: Failed -', error.message, '\n')
+  // Log current configuration
+  logDatabaseConfig()
+  console.log('')
+  
+  // Test 1: Supabase Client (only in online mode)
+  if (mode === 'online') {
+    try {
+      console.log('1. Testing Supabase Client...')
+      if (!supabase) {
+        throw new Error('Supabase client not initialized')
+      }
+      
+      const { data, error } = await supabase
+        .from('information_schema.tables')
+        .select('table_name')
+        .limit(1)
+      
+      if (error) throw error
+      console.log('✅ Supabase Client: Working\n')
+    } catch (error: any) {
+      console.error('❌ Supabase Client: Failed -', error.message, '\n')
+    }
+  } else {
+    console.log('1. Supabase Client: Skipped (local mode)\n')
   }
   
   // Test 2: Direct PostgreSQL

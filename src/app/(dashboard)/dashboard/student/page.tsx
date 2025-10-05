@@ -1,8 +1,7 @@
 import { requireAuth } from '@/lib/auth-server'
-import { MainWrapper } from '@/components/dashboard/CRUD/main-wrapper'
-import { SectionCards } from "@/components/section-cards"
+import { DashboardWrapper } from '@/components/dashboard/dashboard-wrapper'
+import { SectionCards, SectionCardsConfig } from "@/components/section-cards"
 import { DataTable } from "@/components/data-table"
-import data from "./data.json"
 
 const tableSchema = {
   header: { 
@@ -51,7 +50,7 @@ const tableSchema = {
   },
 }
 
-const sectionCardsConfig = {
+const sectionCardsConfig: SectionCardsConfig = {
   cards: [
     {
       title: "Total DUDI", 
@@ -62,18 +61,13 @@ const sectionCardsConfig = {
         title: "Perusahaan Mitra",
         description: "Calon penerima siswa magang",
       },
-      icon: 'building_2' as const
-    },
-    {
-      title: "Siswa Magang",
-      description: "Total Siswa Magang", 
-      value: 1234,
-      format: 'number' as const,
-      footer: {
-        title: "Siswa Magang",
-        description: "Total siswa magang aktif", 
-      },
-      icon: 'users' as const
+      icon: 'building_2' as const,
+      grid: {
+        mobile: { row: 1, col: 1 },
+        tablet: { row: 1, col: 2 },
+        desktop: { row: 1, col: 2 },
+        large: { row: 1, col: 2 }
+      }
     },
     {
       title: "DUDI Aktif",
@@ -84,7 +78,13 @@ const sectionCardsConfig = {
         title: "Siap menerima siswa",
         description: "DUDI yang aktif menerima magang",
       },
-      icon: 'check_circle' as const
+      icon: 'check_circle' as const,
+      grid: {
+        mobile: { row: 1, col: 1 },
+        tablet: { row: 1, col: 1 },
+        desktop: { row: 1, col: 1 },
+        large: { row: 1, col: 1 }
+      }
     },
     {
       title: "DUDI Tidak Aktif",
@@ -95,14 +95,37 @@ const sectionCardsConfig = {
         title: "Tidak menerima siswa",
         description: "DUDI yang tidak aktif",
       },
-      icon: 'x_circle' as const
+      icon: 'x_circle' as const,
+      grid: {
+        mobile: { row: 1, col: 1 },
+        tablet: { row: 1, col: 1 },
+        desktop: { row: 1, col: 1 },
+        large: { row: 1, col: 1 }
+      }
+    },
+    {
+      title: "Siswa Magang",
+      description: "Total Siswa Magang", 
+      value: 1234,
+      format: 'number' as const,
+      footer: {
+        title: "Siswa Magang",
+        description: "Total siswa magang aktif", 
+      },
+      icon: 'users' as const,
+      grid: {
+        mobile: { row: 1, col: 1 },
+        tablet: { row: 2, col: 2 },
+        desktop: { row: 2, col: 2 },
+        large: { row: 2, col: 2 }
+      }
     }
   ],
   columns: {
     mobile: 1,
     tablet: 2, 
-    desktop: 4,
-    large: 4
+    desktop: 2,
+    large: 2
   }
 }
 
@@ -122,7 +145,7 @@ export default async function DashboardPage() {
   const user = await requireAuth()
 
   return (
-    <MainWrapper user={user}>
+    <DashboardWrapper user={user}>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col gap-2">
           <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
@@ -135,6 +158,6 @@ export default async function DashboardPage() {
           </div>
         </div>
       </div>
-    </MainWrapper>
+    </DashboardWrapper>
   )
 }
